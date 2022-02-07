@@ -1,0 +1,70 @@
+name: Generate a CycloneDX SBOM with pipenv and uploads it
+description: |
+  Utilizes https://github.com/CycloneDX/cyclonedx-python to generate a SBOM. This SBOM will then be archived and uploaded to Dependency-Track.
+
+  Prerequisite: `pipenv install -d cyclonedx-bom`
+
+inputs:
+  dependency-track-url:
+    description: URL to the Dependency Track instance to publish the SBOM to.
+    required: false
+  dependency-track-api-key:
+    description: API key of the Dependency Track instance.
+    required: false
+  dependency-track-project-name:
+    description: Project name for Dependency Track.
+    required: false
+  dependency-track-project-version:
+    description: Project name for Dependency Track. Typically the default branch unless multiple forks are maintained.
+    required: false
+    default: main
+  publish:
+    description: "Publish SBOM to Dependency Track"
+    required: false
+    default: "false"
+  report-retention-days:
+    description: Duration in days to preserve reports.
+    required: true
+    default: "5"
+  working-directory:
+    description: Relative path under $GITHUB_WORKSPACE where the root project is located.
+    required: false
+    default: "."
+
+runs:
+  using: composite
+  steps:
+    - name: Action context
+      shell: bash
+      id: context
+      run: |
+        working_directory=$(realpath ${{ inputs.working-directory }})
+        echo "::set-output name=working-directory::$working_directory"
+        echo "::set-output name=bom-path::$working_directory/build/reports/bom.json"
+
+    - name: Generate BOM
+      shell: bash
+      working-directory: ${{ steps.context.outputs.working-directory }}
+      run: |
+        mkdir -p build/reports
+        pipenv run cyclonedx-bom --pip --format json -o "${{ steps.context.outputs.bom-path }}"
+
+    - name: Archive BOM
+      uses: actions/upload-artifact@v2
+      if: "!cancelled()"
+      with:
+        name: bom.json
+        retention-days: ${{ inputs.report-retention-days }}
+        path: ${{ steps.context.outputs.bom-path }}
+
+    - name: Upload BOM
+      uses: DependencyTrack/gh-upload-sbom@v1.0.0
+      if: "!cancelled() && inputs.dependency-track-url != '' && inputs.publish == 'true'"
+      with:
+        autocreate: false
+        apikey: ${{ inputs.dependency-track-api-key }}
+        bomfilename: ${{ steps.context.outputs.bom-path }}
+        projectname: ${{ inputs.dependency-track-project-name }}
+        projectversion: ${{ inputs.dependency-track-project-version }}
+        serverhostname: ${{ inputs.dependency-track-url }}
+
