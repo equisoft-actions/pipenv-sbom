@@ -50,7 +50,7 @@ runs:
         pipenv run cyclonedx-bom --pip --format json -o "${{ steps.context.outputs.bom-path }}"
 
     - name: Archive BOM
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       if: "!cancelled()"
       with:
         name: bom.json
